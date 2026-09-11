@@ -1,0 +1,46 @@
+{
+  "productos": [
+    {
+      "nombre": "Papa",
+      "variedades": ["Blanca", "Punta"],
+      "precio_promedio_lb": 0.65,
+      "tendencia": "estable",
+      "demanda_actual": "alta"
+    },
+    {
+      "nombre": "Cebolla",
+      "variedades": ["Morada", "Amarilla"],
+      "precio_promedio_lb": 0.85,
+      "tendencia": "alza",
+      "demanda_actual": "media"
+    },
+    {
+      "nombre": "Zanahoria",
+      "variedades": ["Nacional"],
+      "precio_promedio_lb": 0.50,
+      "tendencia": "baja",
+      "demanda_actual": "baja"
+    },
+    {
+      "nombre": "Plátano",
+      "variedades": ["Verde", "Maduro"],
+      "precio_promedio_lb": 0.35,
+      "tendencia": "alza",
+      "demanda_actual": "alta"
+    }
+  ],
+  "mercados_cercanos": [
+    {
+      "nombre": "Merca Panamá",
+      "distancia_km": 15,
+      "compradores_activos": 24
+    },
+    {
+      "nombre": "Mercado San Felipe Neri",
+      "distancia_km": 32,
+      "compradores_activos": 10
+    }
+  ],
+  "ultima_actualizacion": "2026-09-11T00:00:00Z"
+}
+

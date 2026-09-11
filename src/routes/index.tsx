@@ -4,8 +4,9 @@ import { ChatHeader } from "@/components/mango/ChatHeader";
 import { ChatBubble, type Message } from "@/components/mango/ChatBubble";
 import { ChatInput } from "@/components/mango/ChatInput";
 import { Toaster } from "@/components/ui/sonner";
-import { toast } from "sonner";
 import { WifiOff, Wifi, Sprout } from "lucide-react";
+import { useOfflineQueue } from "@/hooks/useOfflineQueue";
+import { processUserMessage } from "@/services/qvacAgent";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -36,47 +37,15 @@ const INITIAL_MESSAGES: Message[] = [
     content: "¡Hola! Soy tu Asistente de Campo. ¿Qué producto querés ofrecer hoy?",
     timestamp: "08:30",
   },
-  {
-    id: "2",
-    role: "user",
-    content: "Tengo papa lista para vender, ¿qué precio me conviene?",
-    timestamp: "08:31",
-  },
-  {
-    id: "3",
-    role: "assistant",
-    content:
-      "En tu zona el precio promedio de la papa está en $0.65/lb. Te sugiero publicar a $0.80/lb para maximizar tu margen.",
-    timestamp: "08:32",
-    offer: {
-      product: "Papa",
-      quantity: "50 Quintales",
-      price: "$0.80 / lb",
-    },
-  },
 ];
 
 function Index() {
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
-  const [isOnline, setIsOnline] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Simula fluctuaciones de conexión cada 12 segundos para mostrar el pill dinámico
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setIsOnline((prev) => {
-        const next = !prev;
-        if (next) {
-          toast.success("Conexión restablecida", { icon: <Wifi className="h-4 w-4" /> });
-        } else {
-          toast.warning("Modo offline", { icon: <WifiOff className="h-4 w-4" /> });
-        }
-        return next;
-      });
-    }, 12000);
-    return () => clearInterval(interval);
-  }, []);
+  // 1. Integración del Hook de Red y Cola
+  const { isOnline, publishOffer } = useOfflineQueue();
 
   // Scroll automático al último mensaje
   useEffect(() => {
@@ -87,7 +56,7 @@ function Index() {
     setMessages((prev) => [...prev, message]);
   };
 
-  const handleSend = (text: string) => {
+  const handleSend = async (text: string) => {
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: "user",
@@ -99,32 +68,34 @@ function Index() {
     };
     addMessage(userMessage);
 
-    // Simula respuesta del asistente
+    // 3. Integración del Agente Local (Mock QVAC)
     setIsTyping(true);
-    setTimeout(() => {
-      setIsTyping(false);
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content:
-          "Recibido. Veo que tienes papa disponible. Con base en la demanda actual, te armé esta cotización:",
-        timestamp: new Date().toLocaleTimeString("es-PA", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        offer: {
-          product: "Papa",
-          quantity: "50 Quintales",
-          price: "$0.80 / lb",
-        },
-      };
-      addMessage(assistantMessage);
-    }, 1500);
+    
+    // Llamada al agente (que usa el JSON de RAG local)
+    const aiResponse = await processUserMessage(text);
+    
+    setIsTyping(false);
+    const assistantMessage: Message = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: aiResponse.content || "Hubo un error de procesamiento.",
+      timestamp: new Date().toLocaleTimeString("es-PA", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      ...(aiResponse.offer ? { offer: aiResponse.offer as Message["offer"] } : {}),
+    };
+    addMessage(assistantMessage);
   };
 
-  const handlePublishOffer = () => {
-    toast.success("Oferta publicada en el marketplace de Mango App", {
-      description: "Los compradores cercanos podrán ver tu cotización.",
+  const handlePublishOffer = (offerDetails: any) => {
+    // 4. Se envía a la cola usando el hook (manejará si está online/offline)
+    publishOffer({
+      id: crypto.randomUUID(),
+      product: offerDetails?.product || "Producto Desconocido",
+      quantity: offerDetails?.quantity || "0",
+      price: offerDetails?.price || "$0.00",
+      timestamp: new Date().toISOString()
     });
   };
 
@@ -140,7 +111,7 @@ function Index() {
                 <ChatBubble
                   key={message.id}
                   message={message}
-                  onPublishOffer={handlePublishOffer}
+                  onPublishOffer={() => handlePublishOffer(message.offer)}
                 />
               ))}
               {isTyping && <TypingIndicator />}
@@ -234,7 +205,7 @@ function Index() {
                   <ChatBubble
                     key={message.id}
                     message={message}
-                    onPublishOffer={handlePublishOffer}
+                    onPublishOffer={() => handlePublishOffer(message.offer)}
                   />
                 ))}
                 {isTyping && <TypingIndicator />}
