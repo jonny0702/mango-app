@@ -6,7 +6,7 @@ import { ChatInput } from "@/components/mango/ChatInput";
 import { Toaster } from "@/components/ui/sonner";
 import { WifiOff, Wifi, Sprout } from "lucide-react";
 import { useOfflineQueue } from "@/hooks/useOfflineQueue";
-import { processUserMessage } from "@/services/qvacAgent";
+import mercadoData from "@/data/mercado_local.json";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -68,24 +68,58 @@ function Index() {
     };
     addMessage(userMessage);
 
-    // 3. Integración del Agente Local (Mock QVAC)
+    // 3. Integración del Agente Local Real (QVAC SDK)
     setIsTyping(true);
     
-    // Llamada al agente (que usa el JSON de RAG local)
-    const aiResponse = await processUserMessage(text);
-    
-    setIsTyping(false);
-    const assistantMessage: Message = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: aiResponse.content || "Hubo un error de procesamiento.",
-      timestamp: new Date().toLocaleTimeString("es-PA", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      ...(aiResponse.offer ? { offer: aiResponse.offer as Message["offer"] } : {}),
-    };
-    addMessage(assistantMessage);
+    try {
+      const datosMercado = JSON.stringify(mercadoData.productos);
+      
+      const response = await fetch("http://localhost:3001/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mensajeUsuario: text, datosMercado })
+      });
+
+      if (!response.ok) throw new Error("Error en la respuesta del servidor");
+
+      const data = await response.json();
+      const rawAiResponse = data.respuesta;
+      
+      // Intentamos parsear el JSON que debe devolver el LLM
+      let parsedResponse: Partial<Message> = {};
+      try {
+        parsedResponse = JSON.parse(rawAiResponse);
+      } catch (err) {
+        // Fallback en caso de que el modelo escupa texto libre y no respete el JSON
+        parsedResponse = { content: rawAiResponse };
+      }
+
+      setIsTyping(false);
+      const assistantMessage: Message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: parsedResponse.content || (parsedResponse as any).text || "No entendí muy bien, ¿puedes repetir?",
+        timestamp: new Date().toLocaleTimeString("es-PA", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
+
+      if (parsedResponse.offer) {
+        assistantMessage.offer = parsedResponse.offer;
+      }
+      
+      addMessage(assistantMessage);
+    } catch (error) {
+      console.error(error);
+      setIsTyping(false);
+      addMessage({
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "Error al procesar localmente con el modelo QVAC. Revisa la terminal de Pear.",
+        timestamp: new Date().toLocaleTimeString("es-PA", { hour: "2-digit", minute: "2-digit" }),
+      });
+    }
   };
 
   const handlePublishOffer = (offerDetails: any) => {
@@ -101,7 +135,6 @@ function Index() {
 
   return (
     <div className="min-h-screen bg-mango-cream">
-      {/* ============ MÓVIL / TABLET: vista de app ============ */}
       <div className="lg:hidden">
         <div className="flex h-[100dvh] w-full flex-col overflow-hidden bg-card">
           <ChatHeader isOnline={isOnline} />
